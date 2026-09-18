@@ -12,6 +12,15 @@
 
 const std::string config_filename = "config.yaml";
 
+const std::unordered_map<std::string, int> morse_to_key_code = {
+    {".-", KEY_A},   {"-...", KEY_B}, {"-.-.", KEY_C}, {"-..", KEY_D},  {".", KEY_E},
+    {"..-.", KEY_F}, {"--.", KEY_G},  {"....", KEY_H}, {"..", KEY_I},   {".---", KEY_J},
+    {"-.-", KEY_K},  {".-..", KEY_L}, {"--", KEY_M},   {"-.", KEY_N},   {"---", KEY_O},
+    {".--.", KEY_P}, {"--.-", KEY_Q}, {".-.", KEY_R},  {"...", KEY_S},  {"-", KEY_T},
+    {"..-", KEY_U},  {"...-", KEY_V}, {".--", KEY_W},  {"-..-", KEY_X}, {"-.--", KEY_Y},
+    {"--..", KEY_Z}
+};
+
 int main() {
 	// Create the config yaml if it doesn't exist
 	if (!std::filesystem::exists(config_filename)) {
@@ -118,7 +127,43 @@ int main() {
 			if (space_release_duration.count() > end_threshold) {
 				space_released = false;
 
-				std::cout << "Received: " << received_morse << "\n";
+				std::cout << received_morse;
+
+				auto it = morse_to_key_code.find(received_morse);
+
+				if (it != morse_to_key_code.end()) {
+					int key_code = it->second;
+
+					libevdev_uinput_write_event(
+						uidev,
+						EV_KEY,
+						key_code,
+						1
+					);
+					libevdev_uinput_write_event(
+						uidev,
+						EV_SYN,
+						SYN_REPORT,
+						0
+					);
+					usleep(50000);
+					libevdev_uinput_write_event(
+						uidev,
+						EV_KEY,
+						key_code,
+						0
+					);
+					libevdev_uinput_write_event(
+						uidev,
+						EV_SYN,
+						SYN_REPORT,
+						0
+					);
+
+					std::cout << " -> " << libevdev_event_code_get_name(EV_KEY, key_code) << "\n";
+				} else {
+					std::cout << " Invalid morse\n";
+				}
 
 				received_morse = "";
 			}
