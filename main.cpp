@@ -28,6 +28,7 @@ int main() {
         out << YAML::BeginMap;
         out << YAML::Key << "keyboard" << YAML::Value << "";
         out << YAML::Key << "long_threshold" << YAML::Value << 150;
+        out << YAML::Key << "space_threshold" << YAML::Value << 400;
         out << YAML::Key << "end_threshold" << YAML::Value << 300;
         out << YAML::EndMap;
 
@@ -44,6 +45,7 @@ int main() {
 
 	std::string keyboard_path = config["keyboard"].as<std::string>();
 	int long_threshold = config["long_threshold"].as<int>();
+	int space_threshold = config["space_threshold"].as<int>();
 	int end_threshold = config["end_threshold"].as<int>();
 
     // Open the physical keyboard device
@@ -122,6 +124,41 @@ int main() {
             usleep(1000);
         }
 
+		// Allow space on long press
+		if (space_pressed) {
+			std::chrono::duration<double, std::milli> space_duration = std::chrono::steady_clock::now() - space_start;
+			if (space_duration.count() > space_threshold) {
+				space_pressed = false;
+
+				libevdev_uinput_write_event(
+					uidev,
+					EV_KEY,
+					KEY_SPACE,
+					1
+				);
+				libevdev_uinput_write_event(
+					uidev,
+					EV_SYN,
+					SYN_REPORT,
+					0
+				);
+				usleep(50000);
+				libevdev_uinput_write_event(
+					uidev,
+					EV_KEY,
+					KEY_SPACE,
+					0
+				);
+				libevdev_uinput_write_event(
+					uidev,
+					EV_SYN,
+					SYN_REPORT,
+					0
+				);
+			}
+		}
+
+		// Send the keystroke
 		if (space_released) {
 			std::chrono::duration<double, std::milli> space_release_duration = std::chrono::steady_clock::now() - space_end;
 			if (space_release_duration.count() > end_threshold) {
