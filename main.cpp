@@ -152,6 +152,7 @@ int main() {
 			std::chrono::duration<double, std::milli> space_duration = std::chrono::steady_clock::now() - space_start;
 			if (space_duration.count() > space_threshold) {
 				space_pressed = false;
+				received_morse = "";
 
 				libevdev_uinput_write_event(
 					uidev,
