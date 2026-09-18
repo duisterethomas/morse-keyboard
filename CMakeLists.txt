@@ -11,6 +11,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(yaml-cpp REQUIRED)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBEVDEV REQUIRED IMPORTED_TARGET libevdev)
+
 add_executable(morse-keyboard main.cpp)
 
 target_link_libraries(morse-keyboard PRIVATE yaml-cpp::yaml-cpp)
+target_link_libraries(morse-keyboard PRIVATE PkgConfig::LIBEVDEV)
