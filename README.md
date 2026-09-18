@@ -18,6 +18,7 @@ sudo pacman -S --needed yaml-cpp libevdev
    The easiest way to find your keyboard is to look for a device ending with `-event-kbd` in `/dev/input/by-id/`.
    If that directory doesn't exist you'll have to find another way to get the right keyboard event device in `/dev/input`.
 4. Run `./morse-keyboard`
+_To be able to run Morse Keyboard either your user has to be in the `input` group, or Morse Keyboard has to be run as root._
 
 You can stop Morse Keyboard by pressing `CTRL` + `C` in the terminal it's running in.
 
