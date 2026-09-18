@@ -31,6 +31,8 @@ By default the Morse input is interpreted like this:
 
 All of these values can be configured in the `config.yaml` config.
 
+_Please note that this project is designed for the en_us keyboard layout. So if you use any other layout the Morse might not map correctly._
+
 # Building
 ## Build dependencies
 - cmake
