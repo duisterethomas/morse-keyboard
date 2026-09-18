@@ -15,13 +15,38 @@
 
 const std::string config_filename = "config.yaml";
 
-const std::unordered_map<std::string, int> morse_to_key_code = {
-    {".-", KEY_A},   {"-...", KEY_B}, {"-.-.", KEY_C}, {"-..", KEY_D},  {".", KEY_E},
-    {"..-.", KEY_F}, {"--.", KEY_G},  {"....", KEY_H}, {"..", KEY_I},   {".---", KEY_J},
-    {"-.-", KEY_K},  {".-..", KEY_L}, {"--", KEY_M},   {"-.", KEY_N},   {"---", KEY_O},
-    {".--.", KEY_P}, {"--.-", KEY_Q}, {".-.", KEY_R},  {"...", KEY_S},  {"-", KEY_T},
-    {"..-", KEY_U},  {"...-", KEY_V}, {".--", KEY_W},  {"-..-", KEY_X}, {"-.--", KEY_Y},
-    {"--..", KEY_Z}
+struct morse_code {
+	int key_code;
+	std::string key;
+};
+
+const std::unordered_map<std::string, morse_code> morse_codes = {
+    {".-", morse_code{KEY_A, "A"}},
+	{"-...", morse_code{KEY_B, "B"}},
+	{"-.-.", morse_code{KEY_C, "C"}},
+	{"-..", morse_code{KEY_D, "D"}},
+	{".", morse_code{KEY_E, "E"}},
+	{"..-.", morse_code{KEY_F, "F"}},
+	{"--.", morse_code{KEY_G, "G"}},
+	{"....", morse_code{KEY_H, "H"}},
+	{"..", morse_code{KEY_I, "I"}},
+	{".---", morse_code{KEY_J, "J"}},
+	{"-.-", morse_code{KEY_K, "K"}},
+	{".-..", morse_code{KEY_L, "L"}},
+	{"--", morse_code{KEY_M, "M"}},
+	{"-.", morse_code{KEY_N, "N"}},
+	{"---", morse_code{KEY_O, "O"}},
+	{".--.", morse_code{KEY_P, "P"}},
+	{"--.-", morse_code{KEY_Q, "Q"}},
+	{".-.", morse_code{KEY_R, "R"}},
+	{"...", morse_code{KEY_S, "S"}},
+	{"-", morse_code{KEY_T, "T"}},
+	{"..-", morse_code{KEY_U, "U"}},
+	{"...-", morse_code{KEY_V, "V"}},
+	{".--", morse_code{KEY_W, "W"}},
+	{"-..-", morse_code{KEY_X, "X"}},
+	{"-.--", morse_code{KEY_Y, "Y"}},
+	{"--..", morse_code{KEY_Z, "Z"}},
 };
 
 int main() {
@@ -80,8 +105,8 @@ int main() {
         throw std::runtime_error("Failed to init libevdev");
     }
 
+	// Wait 3 seconds to prevent keys getting stuck
 	std::cout << "Release all keys on the keyboard...\n\n";
-	// Wait 3 second to prevent the return key getting stuck
 	usleep(3000000);
 
     // Grab exclusive access
@@ -190,15 +215,13 @@ int main() {
 
 				std::cout << received_morse;
 
-				auto it = morse_to_key_code.find(received_morse);
+				auto it = morse_codes.find(received_morse);
 
-				if (it != morse_to_key_code.end()) {
-					int key_code = it->second;
-
+				if (it != morse_codes.end()) {
 					libevdev_uinput_write_event(
 						uidev,
 						EV_KEY,
-						key_code,
+						it->second.key_code,
 						1
 					);
 					libevdev_uinput_write_event(
@@ -211,7 +234,7 @@ int main() {
 					libevdev_uinput_write_event(
 						uidev,
 						EV_KEY,
-						key_code,
+						it->second.key_code,
 						0
 					);
 					libevdev_uinput_write_event(
@@ -221,7 +244,7 @@ int main() {
 						0
 					);
 
-					std::cout << " -> " << libevdev_event_code_get_name(EV_KEY, key_code) << "\n";
+					std::cout << " -> " << it->second.key << "\n";
 				} else {
 					std::cout << " Invalid morse\n";
 				}
