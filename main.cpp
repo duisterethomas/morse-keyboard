@@ -1,3 +1,4 @@
+#include <yaml-cpp/emittermanip.h>
 #include <yaml-cpp/yaml.h>
 #include <filesystem>
 #include <fstream>
@@ -26,10 +27,17 @@ int main() {
 	if (!std::filesystem::exists(config_filename)) {
 		YAML::Emitter out;
         out << YAML::BeginMap;
+		out << YAML::Comment(
+			"Set the path to the keyboard device below\n"
+			"It is the easiest to look for a device ending with \"-event-kbd\" in \"/dev/input/by-id/\"\n"
+			"If that directory doesn't exist you'll have to find another way to get the right keyboard device in \"/dev/input/\""
+		);
         out << YAML::Key << "keyboard" << YAML::Value << "";
-        out << YAML::Key << "long_threshold" << YAML::Value << 150;
-        out << YAML::Key << "space_threshold" << YAML::Value << 400;
-        out << YAML::Key << "end_threshold" << YAML::Value << 300;
+		out << YAML::Newline;
+		out << YAML::Newline;
+        out << YAML::Key << "long_threshold" << YAML::Value << 150 << YAML::Comment("Duration in milliseconds the spacebar must be held to be considered a long press");
+        out << YAML::Key << "space_threshold" << YAML::Value << 400 << YAML::Comment("Duration in milliseconds the spacebar must be held to insert a space");
+        out << YAML::Key << "end_threshold" << YAML::Value << 300 << YAML::Comment("Duration in milliseconds after the last Morse input to convert the Morse sequence to a key press");
         out << YAML::EndMap;
 
         std::ofstream fout(config_filename);
@@ -38,6 +46,8 @@ int main() {
         }
         fout << out.c_str();
         fout.close();
+
+		std::cout << "Config file generated at: " << std::filesystem::absolute(config_filename) << "\n\n";
 	}
 
 	// Load the config yaml
@@ -47,6 +57,12 @@ int main() {
 	int long_threshold = config["long_threshold"].as<int>();
 	int space_threshold = config["space_threshold"].as<int>();
 	int end_threshold = config["end_threshold"].as<int>();
+
+	// Tell the user to set the keyboard in the config yaml
+	if (keyboard_path.empty()) {
+		std::cout << "Please set your keyboard in " << std::filesystem::absolute(config_filename) << " and re-run morse-keyboard\n";
+		return 0;
+	}
 
     // Open the physical keyboard device
     int fd = open(keyboard_path.c_str(), O_RDONLY | O_NONBLOCK);
@@ -60,8 +76,9 @@ int main() {
         throw std::runtime_error("Failed to init libevdev");
     }
 
-	// Wait 1 second to prevent the return key getting stuck
-	usleep(1000000);
+	std::cout << "Release all keys on the keyboard...\n\n";
+	// Wait 3 second to prevent the return key getting stuck
+	usleep(3000000);
 
     // Grab exclusive access
     rc = libevdev_grab(dev, LIBEVDEV_GRAB);
@@ -79,6 +96,8 @@ int main() {
     if (rc < 0) {
         throw std::runtime_error("Failed to create uinput device");
     }
+
+	std::cout << "Your spacebar is now the morse input!\nHold it for " << space_threshold << " milliseconds to enter a space\n\n";
 
 	std::chrono::steady_clock::time_point space_start;
 	std::chrono::steady_clock::time_point space_end;
