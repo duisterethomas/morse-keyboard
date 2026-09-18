@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <chrono>
 #include <iostream>
+#include <optional>
 
 #include "version.h"
 
@@ -18,6 +19,7 @@ const std::string config_filename = "config.yaml";
 struct morse_code {
 	int key_code;
 	std::string key;
+	std::optional<bool> forced_shift_state;
 };
 
 const std::unordered_map<std::string, morse_code> morse_codes = {
@@ -47,6 +49,29 @@ const std::unordered_map<std::string, morse_code> morse_codes = {
 	{"-..-", morse_code{KEY_X, "X"}},
 	{"-.--", morse_code{KEY_Y, "Y"}},
 	{"--..", morse_code{KEY_Z, "Z"}},
+	{"-----", morse_code{KEY_0, "0", false}},
+	{".----", morse_code{KEY_1, "1", false}},
+	{"..---", morse_code{KEY_2, "2", false}},
+	{"...--", morse_code{KEY_3, "3", false}},
+	{"....-", morse_code{KEY_4, "4", false}},
+	{".....", morse_code{KEY_5, "5", false}},
+	{"-....", morse_code{KEY_6, "6", false}},
+	{"--...", morse_code{KEY_7, "7", false}},
+	{"---..", morse_code{KEY_8, "8", false}},
+	{"----.", morse_code{KEY_9, "9", false}},
+	{".-.-.-", morse_code{KEY_DOT, ".", false}},
+	{"--..--", morse_code{KEY_COMMA, ",", false}},
+	{"---...", morse_code{KEY_SEMICOLON, ":", true}},
+	{"..--..", morse_code{KEY_SLASH, "?", true}},
+	{".----.", morse_code{KEY_APOSTROPHE, "'", false}},
+	{"-....-", morse_code{KEY_MINUS, "-", false}},
+	{"-..-.", morse_code{KEY_SLASH, "/", false}},
+	{"-.--.", morse_code{KEY_9, "(", true}},
+	{"-.--.-", morse_code{KEY_0, ")", true}},
+	{".-..-.", morse_code{KEY_APOSTROPHE, "\"", true}},
+	{"-...-", morse_code{KEY_EQUAL, "=", false}},
+	{".-.-.", morse_code{KEY_EQUAL, "+", true}},
+	{".--.-.", morse_code{KEY_2, "@", true}}
 };
 
 int main() {
@@ -134,30 +159,41 @@ int main() {
 	bool space_released = false;
 	std::string received_morse;
 
+	bool leftshift_pressed = false;
+	bool rightshift_pressed = false;
+
     while (true) {
         struct input_event ev;
         rc = libevdev_next_event(dev, LIBEVDEV_READ_FLAG_NORMAL, &ev);
 
         if (rc == LIBEVDEV_READ_STATUS_SUCCESS) {
-            if (ev.type == EV_KEY && ev.code == KEY_SPACE) {
-				if (ev.value == 1) {
-					space_start = std::chrono::steady_clock::now();
-					space_pressed = true;
-					space_released = false;
-				} else if (ev.value == 0 && space_pressed) {
-					space_end = std::chrono::steady_clock::now();
-					space_pressed = false;
-					space_released = true;
+            if (ev.type == EV_KEY) {
+				if (ev.code == KEY_SPACE) {
+					if (ev.value == 1) {
+						space_start = std::chrono::steady_clock::now();
+						space_pressed = true;
+						space_released = false;
+					} else if (ev.value == 0 && space_pressed) {
+						space_end = std::chrono::steady_clock::now();
+						space_pressed = false;
+						space_released = true;
 
-					std::chrono::duration<double, std::milli> space_duration = space_end - space_start;
-					if (space_duration.count() > long_threshold) {
-						received_morse += "-";
-					} else {
-						received_morse += ".";
+						std::chrono::duration<double, std::milli> space_duration = space_end - space_start;
+						if (space_duration.count() > long_threshold) {
+							received_morse += "-";
+						} else {
+							received_morse += ".";
+						}
 					}
-				}
 
-                continue;
+					continue;
+
+				} else if (ev.code == KEY_LEFTSHIFT) {
+					leftshift_pressed = ev.value != 0;
+
+				} else if (ev.code == KEY_RIGHTSHIFT) {
+					rightshift_pressed = ev.value != 0;
+				}
             }
 
             // Forward every event that isn't space
@@ -218,6 +254,28 @@ int main() {
 				auto it = morse_codes.find(received_morse);
 
 				if (it != morse_codes.end()) {
+					if (it->second.forced_shift_state.has_value()) {
+						libevdev_uinput_write_event(
+							uidev,
+							EV_KEY,
+							KEY_LEFTSHIFT,
+							static_cast<int>(*it->second.forced_shift_state)
+						);
+						libevdev_uinput_write_event(
+							uidev,
+							EV_KEY,
+							KEY_RIGHTSHIFT,
+							static_cast<int>(*it->second.forced_shift_state)
+						);
+						libevdev_uinput_write_event(
+							uidev,
+							EV_SYN,
+							SYN_REPORT,
+							0
+						);
+						usleep(5000);
+					}
+
 					libevdev_uinput_write_event(
 						uidev,
 						EV_KEY,
@@ -237,6 +295,22 @@ int main() {
 						it->second.key_code,
 						0
 					);
+
+					if (it->second.forced_shift_state.has_value()) {
+						libevdev_uinput_write_event(
+							uidev,
+							EV_KEY,
+							KEY_LEFTSHIFT,
+							static_cast<int>(leftshift_pressed)
+						);
+						libevdev_uinput_write_event(
+							uidev,
+							EV_KEY,
+							KEY_RIGHTSHIFT,
+							static_cast<int>(rightshift_pressed)
+						);
+					}
+
 					libevdev_uinput_write_event(
 						uidev,
 						EV_SYN,
