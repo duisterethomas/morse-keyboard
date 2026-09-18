@@ -55,3 +55,6 @@ _You probably don't need to use Ninja, I just like using it because it simplifie
 
 ## Building
 In the `build` directory you've made above simply run `ninja` to build.
+
+# Morse source
+The Morse standard used in this project is defined on [this ITU page](https://www.itu.int/rec/R-REC-M.1677-1-200910-I/).
