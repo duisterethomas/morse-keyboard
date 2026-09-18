@@ -5,6 +5,7 @@ A wacky project to turn your spacebar into a morse keyboard input on Linux
 ## Dependencies
 - cmake
 - ninja
+- yaml-cpp
 
 ## Setting up the build environment
 ```bash
