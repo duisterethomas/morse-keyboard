@@ -11,6 +11,8 @@
 #include <chrono>
 #include <iostream>
 
+#include "version.h"
+
 const std::string config_filename = "config.yaml";
 
 const std::unordered_map<std::string, int> morse_to_key_code = {
@@ -23,6 +25,8 @@ const std::unordered_map<std::string, int> morse_to_key_code = {
 };
 
 int main() {
+	std::cout << "Morse Keyboard v" << PROJECT_VERSION << "\n\n";
+
 	// Create the config yaml if it doesn't exist
 	if (!std::filesystem::exists(config_filename)) {
 		YAML::Emitter out;
