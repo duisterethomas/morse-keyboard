@@ -12,9 +12,35 @@ sudo pacman -S --needed yaml-cpp libevdev
 ```
 
 ## Running
+### Setting up permissions
+Morse Keyboard grabs your keyboard directly and creates a virtual
+keyboard to send the Morse output and forward non-intercepted keys.
+For this I use `libevdev` which requires access to `/dev/input` and
+`/dev/uinput`, which normal users don't have by default.
+
+**Option 1: Run as root**
+```bash
+sudo ./morse-keyboard
+```
+
+**Option 2: Add yourself to the `input` group and set up a udev rule (recommended)**
+1. Add yourself to the `input` group
+   ```bash
+   sudo usermod -aG input $USER
+   ```
+2. Create `/etc/udev/rules.d/99-uinput.rules` with:
+   ```
+   KERNEL=="uinput", GROUP="input", MODE="0660"
+   ```
+3. Reload udev rules and log out and back in for the group change to apply
+   ```bash
+   sudo udevadm control --reload-rules
+   ```
+
+### Running Morse Keyboard
 1. Download the [latest release](https://github.com/duisterethomas/morse-keyboard/releases/latest)
-2. Run `./morse-keyboard`
-_To be able to run Morse Keyboard either your user has to be in the `input` group, or Morse Keyboard has to be run as root._
+2. Make `morse-keyboard` executable: `chmod +x morse-keyboard`
+3. Run `./morse-keyboard`
 
 You can stop Morse Keyboard by pressing `CTRL` + `C` in the terminal it's running in.
 

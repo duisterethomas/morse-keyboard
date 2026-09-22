@@ -227,7 +227,7 @@ int main() {
         throw std::runtime_error("Failed to create uinput device");
     }
 
-	std::cout << "Your spacebar is now the morse input!\nHold it for " << space_threshold << " milliseconds to enter a space\n\n";
+	std::cout << "Your spacebar is now the morse input!\nHold it for " << space_threshold << " milliseconds to enter a space\nYou can stop Morse Keyboard by pressing CTRL + C in this terminal\n\n";
 
 	std::chrono::steady_clock::time_point space_start;
 	std::chrono::steady_clock::time_point space_end;
