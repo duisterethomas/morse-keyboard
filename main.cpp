@@ -1,16 +1,18 @@
-#include <yaml-cpp/emittermanip.h>
-#include <yaml-cpp/yaml.h>
+#include <chrono>
+#include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
-#include <stdexcept>
-#include <libevdev/libevdev.h>
-#include <libevdev/libevdev-uinput.h>
-#include <linux/input.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <chrono>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
+#include <unistd.h>
+
+#include <libevdev/libevdev.h>
+#include <libevdev/libevdev-uinput.h>
+#include <yaml-cpp/emittermanip.h>
+#include <yaml-cpp/yaml.h>
 
 #include "version.h"
 
@@ -140,7 +142,11 @@ void save_config(const std::string& filename, const std::string& keyboard_path, 
 
 	std::ofstream fout(config_filename);
 	if (!fout) {
-		throw std::runtime_error("Failed to open file for writing: " + config_filename);
+		throw std::runtime_error(
+			"Failed to open file for writing: " +
+			std::filesystem::absolute(config_filename).string() +
+        	" (" + std::strerror(errno) + ")"
+		);
 	}
 	fout << out.c_str();
 	fout.close();
@@ -151,13 +157,18 @@ int main() {
 
 	// Create the config yaml if it doesn't exist
 	if (!std::filesystem::exists(config_filename)) {
-		save_config(
-			config_filename,
-			"",
-			150,
-			400,
-			300
-		);
+		try {
+			save_config(
+				config_filename,
+				"",
+				150,
+				400,
+				300
+			);
+		} catch (const std::runtime_error& e) {
+			std::cerr << e.what() << "\n";
+			return EXIT_FAILURE;
+		}
 
 		std::cout << "Config file generated at: " << std::filesystem::absolute(config_filename) << "\n\n";
 	}
@@ -174,6 +185,11 @@ int main() {
 		// Find all keyboards
 		std::vector<KeyboardDevice> keyboards = list_keyboards();
 
+		if (keyboards.empty()) {
+			std::cerr << "No keyboards were found, have you set up the permissions?\n";
+			return EXIT_FAILURE;
+		}
+
 		// List all keyboards to user
 		for (size_t i = 0; i < keyboards.size(); ++i) {
 			std::cout << i << ": " << keyboards[i].name << " [" << keyboards[i].path << "]\n";
@@ -189,19 +205,26 @@ int main() {
 		keyboard_path = keyboards[keyboard_index].path;
 		config["keyboard"] = keyboard_path;
 
-		save_config(config_filename, keyboard_path, long_threshold, space_threshold, end_threshold);
+		try {
+			save_config(config_filename, keyboard_path, long_threshold, space_threshold, end_threshold);
+		} catch (const std::runtime_error& e) {
+			std::cerr << e.what() << "\n";
+			return EXIT_FAILURE;
+		}
 	}
 
     // Open the physical keyboard device
     int fd = open(keyboard_path.c_str(), O_RDONLY | O_NONBLOCK);
     if (fd < 0) {
-        throw std::runtime_error("Failed to open input device");
+        std::cerr << "Failed to open input device (" << std::strerror(errno) << ")\n";
+		return EXIT_FAILURE;
     }
 
     struct libevdev *dev = nullptr;
     int rc = libevdev_new_from_fd(fd, &dev);
     if (rc < 0) {
-        throw std::runtime_error("Failed to init libevdev");
+        std::cerr << "Failed to init libevdev (" << std::strerror(-rc) << ")\n";
+		return EXIT_FAILURE;
     }
 
 	std::cout << "Using " << libevdev_get_name(dev) << " [" << keyboard_path << "]\n\n";
@@ -213,7 +236,8 @@ int main() {
     // Grab exclusive access
     rc = libevdev_grab(dev, LIBEVDEV_GRAB);
     if (rc < 0) {
-        throw std::runtime_error("Failed to grab device");
+        std::cerr << "Failed to grab device (" << std::strerror(-rc) << ")\n";
+		return EXIT_FAILURE;
     }
 
     // Create a virtual uinput device that mirrors the original keyboard and sends the morse output
@@ -224,7 +248,8 @@ int main() {
         &uidev
     );
     if (rc < 0) {
-        throw std::runtime_error("Failed to create uinput device");
+        std::cerr << "Failed to create uinput device (" << std::strerror(-rc) << ")\n";
+		return EXIT_FAILURE;
     }
 
 	std::cout << "Your spacebar is now the morse input!\nHold it for " << space_threshold << " milliseconds to enter a space\nYou can stop Morse Keyboard by pressing CTRL + C in this terminal\n\n";
@@ -408,5 +433,5 @@ int main() {
     libevdev_free(dev);
     close(fd);
 
-    return 0;
+    return EXIT_SUCCESS;
 }
