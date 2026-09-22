@@ -13,11 +13,7 @@ sudo pacman -S --needed yaml-cpp libevdev
 
 ## Running
 1. Download the [latest release](https://github.com/duisterethomas/morse-keyboard/releases/latest)
-2. Run `./morse-keyboard` once to generate the config file
-3. Edit `config.yaml` and set the full path to the keyboard device after `keyboard:`.
-   The easiest way to find your keyboard is to look for a device ending with `-event-kbd` in `/dev/input/by-id/`.
-   If that directory doesn't exist you'll have to find another way to get the right keyboard event device in `/dev/input`.
-4. Run `./morse-keyboard`
+2. Run `./morse-keyboard`
 _To be able to run Morse Keyboard either your user has to be in the `input` group, or Morse Keyboard has to be run as root._
 
 You can stop Morse Keyboard by pressing `CTRL` + `C` in the terminal it's running in.

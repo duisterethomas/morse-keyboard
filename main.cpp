@@ -74,32 +74,90 @@ const std::unordered_map<std::string, morse_code> morse_codes = {
 	{".--.-.", morse_code{KEY_2, "@", true}}
 };
 
+struct KeyboardDevice {
+    std::string path;
+    std::string name;
+};
+
+std::vector<KeyboardDevice> list_keyboards() {
+    std::vector<KeyboardDevice> keyboards;
+
+	std::string input_directory = "/dev/input";
+	if (std::filesystem::exists("/dev/input/by-id")) {
+		input_directory = "/dev/input/by-id";
+	}
+
+    for (const auto& entry : std::filesystem::directory_iterator(input_directory.c_str())) {
+        std::string path = entry.path().string();
+        if (path.find("event") == std::string::npos) {
+            continue;
+        }
+
+        int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK);
+        if (fd < 0) {
+            continue;
+        }
+
+        struct libevdev *dev = nullptr;
+        if (libevdev_new_from_fd(fd, &dev) < 0) {
+            close(fd);
+            continue;
+        }
+
+        if (libevdev_has_event_code(dev, EV_KEY, KEY_SPACE)) {
+            keyboards.push_back({path, libevdev_get_name(dev)});
+        }
+
+        libevdev_free(dev);
+        close(fd);
+    }
+
+	std::sort(
+		keyboards.begin(), keyboards.end(),
+		[](const KeyboardDevice& a, const KeyboardDevice& b) {
+			return a.name < b.name;
+		}
+	);
+
+    return keyboards;
+}
+
+void save_config(const std::string& filename, const std::string& keyboard_path, int long_threshold, int space_threshold, int end_threshold) {
+	YAML::Emitter out;
+	out << YAML::BeginMap;
+	out << YAML::Comment(
+		"Set the path to the keyboard device below\n"
+		"It is the easiest to look for a device ending with \"-event-kbd\" in \"/dev/input/by-id/\"\n"
+		"If that directory doesn't exist you'll have to find another way to get the right keyboard device in \"/dev/input/\""
+	);
+	out << YAML::Key << "keyboard" << YAML::Value << keyboard_path;
+	out << YAML::Newline;
+	out << YAML::Newline;
+	out << YAML::Key << "long_threshold" << YAML::Value << long_threshold << YAML::Comment("Duration in milliseconds the spacebar must be held to be considered a long press");
+	out << YAML::Key << "space_threshold" << YAML::Value << space_threshold << YAML::Comment("Duration in milliseconds the spacebar must be held to insert a space");
+	out << YAML::Key << "end_threshold" << YAML::Value << end_threshold << YAML::Comment("Duration in milliseconds after the last Morse input to convert the Morse sequence to a key press");
+	out << YAML::EndMap;
+
+	std::ofstream fout(config_filename);
+	if (!fout) {
+		throw std::runtime_error("Failed to open file for writing: " + config_filename);
+	}
+	fout << out.c_str();
+	fout.close();
+}
+
 int main() {
 	std::cout << "Morse Keyboard v" << PROJECT_VERSION << "\n\n";
 
 	// Create the config yaml if it doesn't exist
 	if (!std::filesystem::exists(config_filename)) {
-		YAML::Emitter out;
-        out << YAML::BeginMap;
-		out << YAML::Comment(
-			"Set the path to the keyboard device below\n"
-			"It is the easiest to look for a device ending with \"-event-kbd\" in \"/dev/input/by-id/\"\n"
-			"If that directory doesn't exist you'll have to find another way to get the right keyboard device in \"/dev/input/\""
+		save_config(
+			config_filename,
+			"",
+			150,
+			400,
+			300
 		);
-        out << YAML::Key << "keyboard" << YAML::Value << "";
-		out << YAML::Newline;
-		out << YAML::Newline;
-        out << YAML::Key << "long_threshold" << YAML::Value << 150 << YAML::Comment("Duration in milliseconds the spacebar must be held to be considered a long press");
-        out << YAML::Key << "space_threshold" << YAML::Value << 400 << YAML::Comment("Duration in milliseconds the spacebar must be held to insert a space");
-        out << YAML::Key << "end_threshold" << YAML::Value << 300 << YAML::Comment("Duration in milliseconds after the last Morse input to convert the Morse sequence to a key press");
-        out << YAML::EndMap;
-
-        std::ofstream fout(config_filename);
-        if (!fout) {
-            throw std::runtime_error("Failed to open file for writing: " + config_filename);
-        }
-        fout << out.c_str();
-        fout.close();
 
 		std::cout << "Config file generated at: " << std::filesystem::absolute(config_filename) << "\n\n";
 	}
@@ -112,10 +170,26 @@ int main() {
 	int space_threshold = config["space_threshold"].as<int>();
 	int end_threshold = config["end_threshold"].as<int>();
 
-	// Tell the user to set the keyboard in the config yaml
 	if (keyboard_path.empty()) {
-		std::cout << "Please set your keyboard in " << std::filesystem::absolute(config_filename) << " and re-run morse-keyboard\n";
-		return 0;
+		// Find all keyboards
+		std::vector<KeyboardDevice> keyboards = list_keyboards();
+
+		// List all keyboards to user
+		for (size_t i = 0; i < keyboards.size(); ++i) {
+			std::cout << i << ": " << keyboards[i].name << " [" << keyboards[i].path << "]\n";
+		}
+
+		// Ask user to select a keyboard
+		int keyboard_index;
+		std::cout << "Select keyboard: ";
+		std::cin >> keyboard_index;
+		std::cout << "\n";
+
+		// Select and save the keyboard
+		keyboard_path = keyboards[keyboard_index].path;
+		config["keyboard"] = keyboard_path;
+
+		save_config(config_filename, keyboard_path, long_threshold, space_threshold, end_threshold);
 	}
 
     // Open the physical keyboard device
@@ -129,6 +203,8 @@ int main() {
     if (rc < 0) {
         throw std::runtime_error("Failed to init libevdev");
     }
+
+	std::cout << "Using " << libevdev_get_name(dev) << " [" << keyboard_path << "]\n\n";
 
 	// Wait 3 seconds to prevent keys getting stuck
 	std::cout << "Release all keys on the keyboard...\n\n";
