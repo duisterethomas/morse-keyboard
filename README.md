@@ -6,7 +6,7 @@ A wacky project to turn your spacebar into a Morse keyboard input on Linux.
 - yaml-cpp
 - libevdev
 
-### Arch
+### Arch Linux
 ```bash
 sudo pacman -S --needed yaml-cpp libevdev
 ```
@@ -39,7 +39,8 @@ sudo ./morse-keyboard
 ## Running
 1. Download the [latest release](https://github.com/duisterethomas/morse-keyboard/releases/latest)
 2. Make `morse-keyboard` executable: `chmod +x morse-keyboard`
-3. Run `./morse-keyboard`
+3. Make sure the `uinput` kernel module is loaded with `sudo modprobe uinput`
+4. Run `./morse-keyboard`
 
 You can stop Morse Keyboard by pressing `CTRL` + `C` in the terminal it's running in.
 
@@ -57,14 +58,26 @@ _Please note that this project is designed for the en_us keyboard layout. So if 
 # Building
 ## Build dependencies
 - cmake
+- gcc
+- g++
 - ninja
 - yaml-cpp
 - pkg-config
 - libevdev
 
-### Arch
+### Arch Linux (based)
 ```bash
-sudo pacman -S --needed cmake ninja yaml-cpp pkgconf libevdev
+sudo pacman -S --needed base-devel cmake ninja yaml-cpp libevdev
+```
+
+### Debian/Ubuntu (based)
+```bash
+sudo apt install build-essential cmake ninja-build libyaml-cpp-dev pkgconf libevdev-dev
+```
+
+### Fedora (based)
+```bash
+sudo dnf install cmake gcc gcc-c++ ninja-build yaml-cpp-devel pkgconf libevdev-devel
 ```
 
 ## Setting up the build environment
