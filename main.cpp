@@ -231,6 +231,11 @@ int main() {
 		return EXIT_FAILURE;
     }
 
+	if (!libevdev_has_event_code(dev, EV_KEY, KEY_SPACE)) {
+		std::cerr << libevdev_get_name(dev) << " [" << keyboard_path << "] does not have a spacebar key\n";
+		return EXIT_FAILURE;
+	}
+
 	std::cout << "Using " << libevdev_get_name(dev) << " [" << keyboard_path << "]\n\n";
 
 	// Wait 3 seconds to prevent keys getting stuck
