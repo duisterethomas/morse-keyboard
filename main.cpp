@@ -81,13 +81,8 @@ struct KeyboardDevice {
     std::string name;
 };
 
-std::vector<KeyboardDevice> list_keyboards() {
+std::vector<KeyboardDevice> list_keyboards(std::string input_directory) {
     std::vector<KeyboardDevice> keyboards;
-
-	std::string input_directory = "/dev/input";
-	if (std::filesystem::exists("/dev/input/by-id")) {
-		input_directory = "/dev/input/by-id";
-	}
 
     for (const auto& entry : std::filesystem::directory_iterator(input_directory.c_str())) {
         std::string path = entry.path().string();
@@ -183,7 +178,16 @@ int main() {
 
 	if (keyboard_path.empty()) {
 		// Find all keyboards
-		std::vector<KeyboardDevice> keyboards = list_keyboards();
+		std::vector<KeyboardDevice> keyboards;
+		// First by id
+		if (std::filesystem::exists("/dev/input/by-id")) {
+			keyboards = list_keyboards("/dev/input/by-id");
+		}
+
+		// If none found try in /dev/input
+		if (keyboards.empty()) {
+			keyboards = list_keyboards("/dev/input");
+		}
 
 		if (keyboards.empty()) {
 			std::cerr << "No keyboards were found, have you set up the permissions?\n";
