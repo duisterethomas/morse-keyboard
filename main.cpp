@@ -81,7 +81,7 @@ struct KeyboardDevice {
     std::string name;
 };
 
-std::vector<KeyboardDevice> list_keyboards(std::string input_directory) {
+std::vector<KeyboardDevice> list_keyboards(std::string input_directory, int morse_key_code) {
     std::vector<KeyboardDevice> keyboards;
 
     for (const auto& entry : std::filesystem::directory_iterator(input_directory.c_str())) {
@@ -101,7 +101,7 @@ std::vector<KeyboardDevice> list_keyboards(std::string input_directory) {
             continue;
         }
 
-        if (libevdev_has_event_code(dev, EV_KEY, KEY_SPACE)) {
+        if (libevdev_has_event_code(dev, EV_KEY, morse_key_code)) {
             keyboards.push_back({path, libevdev_get_name(dev)});
         }
 
@@ -119,7 +119,7 @@ std::vector<KeyboardDevice> list_keyboards(std::string input_directory) {
     return keyboards;
 }
 
-void save_config(const std::string& filename, const std::string& keyboard_path, int long_threshold, int space_threshold, int end_threshold) {
+void save_config(const std::string& filename, const std::string& keyboard_path, const std::string& morse_key, int long_threshold, int original_key_threshold, int end_threshold) {
 	YAML::Emitter out;
 	out << YAML::BeginMap;
 	out << YAML::Comment(
@@ -129,8 +129,16 @@ void save_config(const std::string& filename, const std::string& keyboard_path, 
 	out << YAML::Key << "keyboard" << YAML::Value << keyboard_path;
 	out << YAML::Newline;
 	out << YAML::Newline;
-	out << YAML::Key << "long_threshold" << YAML::Value << long_threshold << YAML::Comment("Duration in milliseconds the spacebar must be held to be considered a long press");
-	out << YAML::Key << "space_threshold" << YAML::Value << space_threshold << YAML::Comment("Duration in milliseconds the spacebar must be held to insert a space");
+	out << YAML::Comment(
+		"The keyboard key to use for the Morse input\n"
+		"See https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/input-event-codes.h#n69 for all valid keys.\n"
+		"Anything in that file starting with \"KEY_\" should be valid"
+	);
+	out << YAML::Key << "morse_key" << YAML::Value << morse_key;
+	out << YAML::Newline;
+	out << YAML::Newline;
+	out << YAML::Key << "long_threshold" << YAML::Value << long_threshold << YAML::Comment("Duration in milliseconds the Morse key must be held to be considered a long press");
+	out << YAML::Key << "original_key_threshold" << YAML::Value << original_key_threshold << YAML::Comment("Duration in milliseconds the Morse key must be held to press and release the original key");
 	out << YAML::Key << "end_threshold" << YAML::Value << end_threshold << YAML::Comment("Duration in milliseconds after the last Morse input to convert the Morse sequence to a key press");
 	out << YAML::EndMap;
 
@@ -155,6 +163,7 @@ int main() {
 			save_config(
 				config_filename,
 				"",
+				"KEY_SPACE",
 				150,
 				400,
 				300
@@ -171,8 +180,10 @@ int main() {
 	YAML::Node config = YAML::LoadFile(config_filename);
 
 	std::string keyboard_path = config["keyboard"].as<std::string>();
+	std::string morse_key = config["morse_key"].as<std::string>();
+	int morse_key_code = libevdev_event_code_from_name(EV_KEY, morse_key.c_str());
 	int long_threshold = config["long_threshold"].as<int>();
-	int space_threshold = config["space_threshold"].as<int>();
+	int original_key_threshold = config["original_key_threshold"].as<int>();
 	int end_threshold = config["end_threshold"].as<int>();
 
 	if (keyboard_path.empty()) {
@@ -180,12 +191,12 @@ int main() {
 		std::vector<KeyboardDevice> keyboards;
 		// First by id
 		if (std::filesystem::exists("/dev/input/by-id")) {
-			keyboards = list_keyboards("/dev/input/by-id");
+			keyboards = list_keyboards("/dev/input/by-id", morse_key_code);
 		}
 
 		// If none found try in /dev/input
 		if (keyboards.empty()) {
-			keyboards = list_keyboards("/dev/input");
+			keyboards = list_keyboards("/dev/input", morse_key_code);
 		}
 
 		if (keyboards.empty()) {
@@ -209,7 +220,7 @@ int main() {
 		config["keyboard"] = keyboard_path;
 
 		try {
-			save_config(config_filename, keyboard_path, long_threshold, space_threshold, end_threshold);
+			save_config(config_filename, keyboard_path, morse_key, long_threshold, original_key_threshold, end_threshold);
 		} catch (const std::runtime_error& e) {
 			std::cerr << e.what() << "\n";
 			return EXIT_FAILURE;
@@ -230,8 +241,8 @@ int main() {
 		return EXIT_FAILURE;
     }
 
-	if (!libevdev_has_event_code(dev, EV_KEY, KEY_SPACE)) {
-		std::cerr << libevdev_get_name(dev) << " [" << keyboard_path << "] does not have a spacebar key\n";
+	if (!libevdev_has_event_code(dev, EV_KEY, morse_key_code)) {
+		std::cerr << libevdev_get_name(dev) << " [" << keyboard_path << "] does not have " << morse_key << "\n";
 		return EXIT_FAILURE;
 	}
 
@@ -248,7 +259,7 @@ int main() {
 		return EXIT_FAILURE;
     }
 
-    // Create a virtual uinput device that mirrors the original keyboard and sends the morse output
+    // Create a virtual uinput device that mirrors the original keyboard and sends the Morse output
     struct libevdev_uinput *uidev = nullptr;
     rc = libevdev_uinput_create_from_device(
         dev,
@@ -260,12 +271,12 @@ int main() {
 		return EXIT_FAILURE;
     }
 
-	std::cout << "Your spacebar is now the morse input!\nHold it for " << space_threshold << " milliseconds to enter a space\nYou can stop Morse Keyboard by pressing CTRL + C in this terminal\n\n";
+	std::cout << morse_key.substr(4) << " is now the Morse input key!\nYou can stop Morse Keyboard by pressing CTRL + C in this terminal\n\n";
 
-	std::chrono::steady_clock::time_point space_start;
-	std::chrono::steady_clock::time_point space_end;
-	bool space_pressed = false;
-	bool space_released = false;
+	std::chrono::steady_clock::time_point morse_key_start;
+	std::chrono::steady_clock::time_point morse_key_end;
+	bool morse_key_pressed = false;
+	bool morse_key_released = false;
 	std::string received_morse;
 
 	bool leftshift_pressed = false;
@@ -277,18 +288,18 @@ int main() {
 
         if (rc == LIBEVDEV_READ_STATUS_SUCCESS) {
             if (ev.type == EV_KEY) {
-				if (ev.code == KEY_SPACE) {
+				if (ev.code == morse_key_code) {
 					if (ev.value == 1) {
-						space_start = std::chrono::steady_clock::now();
-						space_pressed = true;
-						space_released = false;
-					} else if (ev.value == 0 && space_pressed) {
-						space_end = std::chrono::steady_clock::now();
-						space_pressed = false;
-						space_released = true;
+						morse_key_start = std::chrono::steady_clock::now();
+						morse_key_pressed = true;
+						morse_key_released = false;
+					} else if (ev.value == 0 && morse_key_pressed) {
+						morse_key_end = std::chrono::steady_clock::now();
+						morse_key_pressed = false;
+						morse_key_released = true;
 
-						std::chrono::duration<double, std::milli> space_duration = space_end - space_start;
-						if (space_duration.count() > long_threshold) {
+						std::chrono::duration<double, std::milli> morse_key_duration = morse_key_end - morse_key_start;
+						if (morse_key_duration.count() > long_threshold) {
 							received_morse += "-";
 						} else {
 							received_morse += ".";
@@ -305,7 +316,7 @@ int main() {
 				}
             }
 
-            // Forward every event that isn't space
+            // Forward every event that isn't the Morse key
             libevdev_uinput_write_event(
                 uidev,
                 ev.type,
@@ -317,17 +328,17 @@ int main() {
             usleep(1000);
         }
 
-		// Allow space on long press
-		if (space_pressed) {
-			std::chrono::duration<double, std::milli> space_duration = std::chrono::steady_clock::now() - space_start;
-			if (space_duration.count() > space_threshold) {
-				space_pressed = false;
+		// Allow original key on long press
+		if (morse_key_pressed) {
+			std::chrono::duration<double, std::milli> morse_key_duration = std::chrono::steady_clock::now() - morse_key_start;
+			if (morse_key_duration.count() > original_key_threshold) {
+				morse_key_pressed = false;
 				received_morse = "";
 
 				libevdev_uinput_write_event(
 					uidev,
 					EV_KEY,
-					KEY_SPACE,
+					morse_key_code,
 					1
 				);
 				libevdev_uinput_write_event(
@@ -340,7 +351,7 @@ int main() {
 				libevdev_uinput_write_event(
 					uidev,
 					EV_KEY,
-					KEY_SPACE,
+					morse_key_code,
 					0
 				);
 				libevdev_uinput_write_event(
@@ -353,10 +364,10 @@ int main() {
 		}
 
 		// Send the keystroke
-		if (space_released) {
-			std::chrono::duration<double, std::milli> space_release_duration = std::chrono::steady_clock::now() - space_end;
-			if (space_release_duration.count() > end_threshold) {
-				space_released = false;
+		if (morse_key_released) {
+			std::chrono::duration<double, std::milli> morse_key_release_duration = std::chrono::steady_clock::now() - morse_key_end;
+			if (morse_key_release_duration.count() > end_threshold) {
+				morse_key_released = false;
 
 				std::cout << received_morse;
 

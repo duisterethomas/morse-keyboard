@@ -1,5 +1,5 @@
 # Morse Keyboard
-A wacky project to turn your spacebar into a Morse keyboard input on Linux.
+A wacky project to turn any key on your keyboard into a Morse keyboard input on Linux.
 
 # Usage
 ## Dependencies
@@ -46,10 +46,10 @@ You can stop Morse Keyboard by pressing `CTRL` + `C` in the terminal it's runnin
 
 ## Morse interpretation
 By default the Morse input is interpreted like this:
-- Space press duration < 150ms = Short press
-- Space press duration >= 150ms = Long press
-- Space press duration >= 400ms = Insert a space
-- Space not pressed for 300ms = Convert Morse to key press
+- Morse key press duration < 150ms = Short press
+- Morse key press duration >= 150ms = Long press
+- Morse key press duration >= 400ms = Press and release the original key
+- Morse key not pressed for 300ms = Convert Morse to key press
 
 All of these values can be configured in the `config.yaml` config.
 
