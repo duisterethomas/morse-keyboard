@@ -123,9 +123,8 @@ void save_config(const std::string& filename, const std::string& keyboard_path, 
 	YAML::Emitter out;
 	out << YAML::BeginMap;
 	out << YAML::Comment(
-		"Set the path to the keyboard device below\n"
-		"It is the easiest to look for a device ending with \"-event-kbd\" in \"/dev/input/by-id/\"\n"
-		"If that directory doesn't exist you'll have to find another way to get the right keyboard device in \"/dev/input/\""
+		"The path to the keyboard device\n"
+		"Replace it with \"\" to get the keyboard selection prompt when running morse-keyboard"
 	);
 	out << YAML::Key << "keyboard" << YAML::Value << keyboard_path;
 	out << YAML::Newline;
