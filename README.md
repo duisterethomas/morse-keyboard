@@ -11,8 +11,7 @@ A wacky project to turn your spacebar into a Morse keyboard input on Linux.
 sudo pacman -S --needed yaml-cpp libevdev
 ```
 
-## Running
-### Setting up permissions
+## Setting up permissions
 Morse Keyboard grabs your keyboard directly and creates a virtual
 keyboard to send the Morse output and forward non-intercepted keys.
 For this I use `libevdev` which requires access to `/dev/input` and
@@ -37,7 +36,7 @@ sudo ./morse-keyboard
    sudo udevadm control --reload-rules
    ```
 
-### Running Morse Keyboard
+## Running
 1. Download the [latest release](https://github.com/duisterethomas/morse-keyboard/releases/latest)
 2. Make `morse-keyboard` executable: `chmod +x morse-keyboard`
 3. Run `./morse-keyboard`
