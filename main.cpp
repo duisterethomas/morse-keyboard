@@ -81,7 +81,7 @@ struct KeyboardDevice {
     std::string name;
 };
 
-std::vector<KeyboardDevice> list_keyboards(std::string input_directory, int morse_key_code) {
+std::vector<KeyboardDevice> list_keyboards(const std::string& input_directory, const int& morse_key_code) {
     std::vector<KeyboardDevice> keyboards;
 
     for (const auto& entry : std::filesystem::directory_iterator(input_directory.c_str())) {
@@ -119,12 +119,12 @@ std::vector<KeyboardDevice> list_keyboards(std::string input_directory, int mors
     return keyboards;
 }
 
-void save_config(const std::string& filename, const std::string& keyboard_path, const std::string& morse_key, int long_threshold, int original_key_threshold, int end_threshold) {
+void save_config(const std::string& filename, const std::string& keyboard_path, const std::string& morse_key, const int& long_threshold, const int& original_key_threshold, const int& end_threshold) {
 	YAML::Emitter out;
 	out << YAML::BeginMap;
 	out << YAML::Comment(
 		"The path to the keyboard device\n"
-		"Replace it with \"\" to get the keyboard selection prompt when running morse-keyboard"
+		"Remove the line below to get the keyboard selection prompt when running morse-keyboard"
 	);
 	out << YAML::Key << "keyboard" << YAML::Value << keyboard_path;
 	out << YAML::Newline;
@@ -154,19 +154,42 @@ void save_config(const std::string& filename, const std::string& keyboard_path, 
 	fout.close();
 }
 
+template <typename T>
+bool load_config_node(YAML::Node& config, const char* node, T* variable) {
+	if (config[node]) {
+		try {
+			*variable = config[node].as<T>();
+			return true;
+		} catch (const YAML::BadConversion&) {
+			std::cerr << "The value of \"" << node << "\" is invalid, reverting to default: " << *variable << "\n";
+			return false;
+		}
+	} else {
+		std::cerr << "\"" << node << "\" entry could not be found in " << std::filesystem::absolute(config_filename) << ", reverting to default: " << *variable << "\n";
+		return false;
+	}
+}
+
 int main() {
 	std::cout << "Morse Keyboard v" << PROJECT_VERSION << "\n\n";
+
+	// Set config defaults
+	std::string keyboard_path;
+	std::string morse_key = "KEY_SPACE";
+	int long_threshold = 150;
+	int original_key_threshold = 400;
+	int end_threshold = 300;
 
 	// Create the config yaml if it doesn't exist
 	if (!std::filesystem::exists(config_filename)) {
 		try {
 			save_config(
 				config_filename,
-				"",
-				"KEY_SPACE",
-				150,
-				400,
-				300
+				keyboard_path,
+				morse_key,
+				long_threshold,
+				original_key_threshold,
+				end_threshold
 			);
 		} catch (const std::runtime_error& e) {
 			std::cerr << e.what() << "\n";
@@ -179,14 +202,33 @@ int main() {
 	// Load the config yaml
 	YAML::Node config = YAML::LoadFile(config_filename);
 
-	std::string keyboard_path = config["keyboard"].as<std::string>();
-	std::string morse_key = config["morse_key"].as<std::string>();
-	int morse_key_code = libevdev_event_code_from_name(EV_KEY, morse_key.c_str());
-	int long_threshold = config["long_threshold"].as<int>();
-	int original_key_threshold = config["original_key_threshold"].as<int>();
-	int end_threshold = config["end_threshold"].as<int>();
+	bool config_changed = false;
 
-	if (keyboard_path.empty()) {
+	if (!load_config_node(config, "keyboard", &keyboard_path)) config_changed = true;
+	if (!load_config_node(config, "morse_key", &morse_key)) config_changed = true;
+	if (!load_config_node(config, "long_threshold", &long_threshold)) config_changed = true;
+	if (!load_config_node(config, "original_key_threshold", &original_key_threshold)) config_changed = true;
+	if (!load_config_node(config, "end_threshold", &end_threshold)) config_changed = true;
+
+	if (config_changed) std::cout << "\n";
+
+	// Try to convert key to key code
+	int morse_key_code = libevdev_event_code_from_name(EV_KEY, morse_key.c_str());
+	if (morse_key_code == -1) {
+		std::cerr << morse_key << " is an invalid key code, reverting to default: KEY_SPACE\n\n";
+
+		morse_key = "KEY_SPACE";
+		morse_key_code = KEY_SPACE;
+
+		config_changed = true;
+	}
+
+	// Ask the user to set a keyboard if not set or invalid
+	if (keyboard_path.empty() || !std::filesystem::exists(keyboard_path)) {
+		if (!keyboard_path.empty() && !std::filesystem::exists(keyboard_path)) {
+			std::cerr << "\"" << keyboard_path << "\": " << std::strerror(ENOENT) << ", please select a new keyboard\n";
+		}
+
 		// Find all keyboards
 		std::vector<KeyboardDevice> keyboards;
 		// First by id
@@ -204,21 +246,36 @@ int main() {
 			return EXIT_FAILURE;
 		}
 
-		// List all keyboards to user
-		for (size_t i = 0; i < keyboards.size(); ++i) {
-			std::cout << i << ": " << keyboards[i].name << " [" << keyboards[i].path << "]\n";
-		}
-
 		// Ask user to select a keyboard
 		int keyboard_index;
-		std::cout << "Select keyboard: ";
-		std::cin >> keyboard_index;
+		while (true) {
+			// List all keyboards to user
+			for (size_t i = 0; i < keyboards.size(); ++i) {
+				std::cout << i << ": " << keyboards[i].name << " [" << keyboards[i].path << "]\n";
+			}
+
+			std::cout << "Select a keyboard (0-" << keyboards.size() - 1 << "): ";
+			std::cin >> keyboard_index;
+
+			if (std::cin) {
+				break;
+			}
+
+			std::cout << "That's not a valid option, try again.\n\n";
+			std::cin.clear();
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		}
 		std::cout << "\n";
 
 		// Select and save the keyboard
 		keyboard_path = keyboards[keyboard_index].path;
 		config["keyboard"] = keyboard_path;
 
+		config_changed = true;
+	}
+
+	// Save the config changes
+	if (config_changed) {
 		try {
 			save_config(config_filename, keyboard_path, morse_key, long_threshold, original_key_threshold, end_threshold);
 		} catch (const std::runtime_error& e) {
