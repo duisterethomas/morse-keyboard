@@ -17,24 +17,27 @@ keyboard to send the Morse output and forward non-intercepted keys.
 For this I use `libevdev` which requires access to `/dev/input` and
 `/dev/uinput`, which normal users don't have by default.
 
-**Option 1: Run as root**
+### Option 1: Run as root
+This is the simpler option. Just run `morse-keyboard` as root at step 4 of the [running instructions](#running).
 ```bash
 sudo ./morse-keyboard
 ```
 
-**Option 2: Add yourself to the `input` group and set up a udev rule (recommended)**
-1. Add yourself to the `input` group
+### Option 2: Set up a udev rule (recommended)
+A bit more complicated than option 1, but once set up you never have to run `morse-keyboard` as root.
+1. Add your user to the `input` group
    ```bash
    sudo usermod -aG input $USER
    ```
-2. Create `/etc/udev/rules.d/99-uinput.rules` with:
+2. Create `/etc/udev/rules.d/99-uinput.rules` with the following contents:
    ```
    KERNEL=="uinput", GROUP="input", MODE="0660"
    ```
-3. Reload udev rules and log out and back in for the group change to apply
+3. Reload udev rules
    ```bash
    sudo udevadm control --reload-rules
    ```
+4. Log out and back in for the group change to apply
 
 ## Running
 1. Download the [latest release](https://github.com/duisterethomas/morse-keyboard/releases/latest)
