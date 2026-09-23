@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(morse-keyboard
-	VERSION 1.2.0
+	VERSION 1.3.0
 	LANGUAGES CXX
 )
 
