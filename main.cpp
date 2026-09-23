@@ -147,7 +147,7 @@ void save_config(const std::string& filename, const std::string& keyboard_path, 
 		throw std::runtime_error(
 			"Failed to open file for writing: " +
 			std::filesystem::absolute(config_filename).string() +
-        	" (" + std::strerror(errno) + ")"
+			" (" + std::strerror(errno) + ")"
 		);
 	}
 	fout << out.c_str();
@@ -168,6 +168,47 @@ bool load_config_node(YAML::Node& config, const char* node, T* variable) {
 		std::cerr << "\"" << node << "\" entry could not be found in " << std::filesystem::absolute(config_filename) << ", reverting to default: " << *variable << "\n";
 		return false;
 	}
+}
+
+std::string select_keyboard(int& morse_key_code) {
+	// Find all keyboards
+	std::vector<KeyboardDevice> keyboards;
+	// First by id
+	if (std::filesystem::exists("/dev/input/by-id")) {
+		keyboards = list_keyboards("/dev/input/by-id", morse_key_code);
+	}
+
+	// If none found try in /dev/input
+	if (keyboards.empty()) {
+		keyboards = list_keyboards("/dev/input", morse_key_code);
+	}
+
+	if (keyboards.empty()) {
+		throw std::runtime_error("No keyboards were found, have you set up the permissions?");
+	}
+
+	// Ask user to select a keyboard
+	int keyboard_index;
+	while (true) {
+		// List all keyboards to user
+		for (size_t i = 0; i < keyboards.size(); ++i) {
+			std::cout << i << ": " << keyboards[i].name << " [" << keyboards[i].path << "]\n";
+		}
+
+		std::cout << "Select a keyboard (0-" << keyboards.size() - 1 << "): ";
+		std::cin >> keyboard_index;
+
+		if (std::cin) {
+			break;
+		}
+
+		std::cout << "That's not a valid option, try again.\n\n";
+		std::cin.clear();
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	}
+	std::cout << "\n";
+
+	return keyboards[keyboard_index].path;
 }
 
 int main() {
@@ -229,49 +270,60 @@ int main() {
 			std::cerr << "\"" << keyboard_path << "\": " << std::strerror(ENOENT) << ", please select a new keyboard\n";
 		}
 
-		// Find all keyboards
-		std::vector<KeyboardDevice> keyboards;
-		// First by id
-		if (std::filesystem::exists("/dev/input/by-id")) {
-			keyboards = list_keyboards("/dev/input/by-id", morse_key_code);
-		}
-
-		// If none found try in /dev/input
-		if (keyboards.empty()) {
-			keyboards = list_keyboards("/dev/input", morse_key_code);
-		}
-
-		if (keyboards.empty()) {
-			std::cerr << "No keyboards were found, have you set up the permissions?\n";
+		// Select and save the keyboard
+		try {
+			keyboard_path = select_keyboard(morse_key_code);
+		} catch (const std::runtime_error& e) {
+			std::cerr << e.what() << "\n";
 			return EXIT_FAILURE;
 		}
 
-		// Ask user to select a keyboard
-		int keyboard_index;
-		while (true) {
-			// List all keyboards to user
-			for (size_t i = 0; i < keyboards.size(); ++i) {
-				std::cout << i << ": " << keyboards[i].name << " [" << keyboards[i].path << "]\n";
-			}
-
-			std::cout << "Select a keyboard (0-" << keyboards.size() - 1 << "): ";
-			std::cin >> keyboard_index;
-
-			if (std::cin) {
-				break;
-			}
-
-			std::cout << "That's not a valid option, try again.\n\n";
-			std::cin.clear();
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		}
-		std::cout << "\n";
-
-		// Select and save the keyboard
-		keyboard_path = keyboards[keyboard_index].path;
 		config["keyboard"] = keyboard_path;
 
 		config_changed = true;
+	}
+
+	struct libevdev *dev = nullptr;
+	int fd;
+
+	bool connection_succeeded = false;
+	while (!connection_succeeded) {
+		// Open the physical keyboard device
+		fd = open(keyboard_path.c_str(), O_RDONLY | O_NONBLOCK);
+		if (fd < 0) {
+			std::cerr << "Failed to open input device (" << std::strerror(errno) << ")\n";
+			return EXIT_FAILURE;
+		}
+
+		int rc = libevdev_new_from_fd(fd, &dev);
+		if (rc < 0) {
+			std::cerr << "Failed to init libevdev (" << std::strerror(-rc) << ")\n";
+			return EXIT_FAILURE;
+		}
+
+		if (!libevdev_has_event_code(dev, EV_KEY, morse_key_code)) {
+			std::cerr << libevdev_get_name(dev) << " [" << keyboard_path << "] does not have " << morse_key << ", please select a new keyboard\n";
+
+			// Close the deivce
+			libevdev_free(dev);
+			close(fd);
+
+			// Select and save a new keyboard
+			try {
+				keyboard_path = select_keyboard(morse_key_code);
+			} catch (const std::runtime_error& e) {
+				std::cerr << e.what() << "\n";
+				return EXIT_FAILURE;
+			}
+
+			config["keyboard"] = keyboard_path;
+
+			config_changed = true;
+
+			continue;
+		}
+
+		connection_succeeded = true;
 	}
 
 	// Save the config changes
@@ -284,25 +336,6 @@ int main() {
 		}
 	}
 
-    // Open the physical keyboard device
-    int fd = open(keyboard_path.c_str(), O_RDONLY | O_NONBLOCK);
-    if (fd < 0) {
-        std::cerr << "Failed to open input device (" << std::strerror(errno) << ")\n";
-		return EXIT_FAILURE;
-    }
-
-    struct libevdev *dev = nullptr;
-    int rc = libevdev_new_from_fd(fd, &dev);
-    if (rc < 0) {
-        std::cerr << "Failed to init libevdev (" << std::strerror(-rc) << ")\n";
-		return EXIT_FAILURE;
-    }
-
-	if (!libevdev_has_event_code(dev, EV_KEY, morse_key_code)) {
-		std::cerr << libevdev_get_name(dev) << " [" << keyboard_path << "] does not have " << morse_key << "\n";
-		return EXIT_FAILURE;
-	}
-
 	std::cout << "Using " << libevdev_get_name(dev) << " [" << keyboard_path << "]\n\n";
 
 	// Wait 3 seconds to prevent keys getting stuck
@@ -310,7 +343,7 @@ int main() {
 	usleep(3000000);
 
     // Grab exclusive access
-    rc = libevdev_grab(dev, LIBEVDEV_GRAB);
+    int rc = libevdev_grab(dev, LIBEVDEV_GRAB);
     if (rc < 0) {
         std::cerr << "Failed to grab device (" << std::strerror(-rc) << ")\n";
 		return EXIT_FAILURE;
