@@ -80,6 +80,11 @@ sudo apt install build-essential cmake ninja-build libyaml-cpp-dev pkgconf libev
 sudo dnf install cmake gcc gcc-c++ ninja-build yaml-cpp-devel pkgconf libevdev-devel
 ```
 
+### Alpine Linux (based)
+```bash
+sudo apk add cmake gcc g++ ninja yaml-cpp-dev pkgconf libevdev-dev
+```
+
 ## Setting up the build environment
 ```bash
 git clone https://github.com/duisterethomas/morse-keyboard
